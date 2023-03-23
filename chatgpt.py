@@ -1,22 +1,26 @@
-#!/Users/kai/miniconda3/envs/chatgpt/bin/python
+#!/home/kai/miniconda3/envs/chatgpt/bin/python
 
-import atexit
-import click
 import os
 import requests
 import sys
-import yaml
-import openai
-import tiktoken
 
+import openai
 
 from prompt_toolkit import PromptSession, HTML
 from prompt_toolkit.history import FileHistory
+
 from rich.console import Console
 from rich.live import Live
 from rich.text import Text
 
-CONFIG_FILE = "config.yaml"
+import click
+
+import atexit
+
+from util import load_config, num_tokens_from_messages, calculate_expense
+
+
+CONFIG_FILE = os.path.expanduser("~/.chatgpt-cli.yaml")
 BASE_ENDPOINT = "https://api.openai.com/v1"
 
 PRICING_RATE = {
@@ -34,55 +38,6 @@ prompt_tokens = 0
 completion_tokens = 0
 # Initialize the console
 console = Console()
-
-def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
-  """Returns the number of tokens used by a list of messages."""
-  try:
-      encoding = tiktoken.encoding_for_model(model)
-  except KeyError:
-      encoding = tiktoken.get_encoding("cl100k_base")
-  if model == "gpt-3.5-turbo-0301":  # note: future models may deviate from this
-      num_tokens = 0
-      for message in messages:
-          num_tokens += 4  # every message follows <im_start>{role/name}\n{content}<im_end>\n
-          for key, value in message.items():
-              num_tokens += len(encoding.encode(value))
-              if key == "name":  # if there's a name, the role is omitted
-                  num_tokens += -1  # role is always required and always 1 token
-      num_tokens += 2  # every reply is primed with <im_start>assistant
-      return num_tokens
-  else:
-      raise NotImplementedError(f"""num_tokens_from_messages() is not presently implemented for model {model}.
-  See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.""")
-
-def load_config(config_file: str) -> dict:
-    """
-    Read a YAML config file and returns it's content as a dictionary
-    """
-    with open(config_file) as file:
-        config = yaml.load(file, Loader=yaml.FullLoader)
-    if not config["api-key"].startswith("sk"):
-        config["api-key"] = os.environ.get("OAI_SECRET_KEY", "fail")
-    while not config["api-key"].startswith("sk"):
-        config["api-key"] = input(
-            "Enter your OpenAI Secret Key (should start with 'sk-')\n"
-        )
-    return config
-
-
-def calculate_expense(
-    prompt_tokens: int,
-    completion_tokens: int,
-    prompt_pricing: float,
-    completion_pricing: float,
-) -> float:
-    """
-    Calculate the expense, given the number of tokens and the pricing rates
-    """
-    expense = ((prompt_tokens / 1000) * prompt_pricing) + (
-        (completion_tokens / 1000) * completion_pricing
-    )
-    return round(expense, 6)
 
 
 def display_expense(model) -> None:
