@@ -77,7 +77,7 @@ def display_expense(model) -> None:
 
 def start_prompt(session, config):
     # TODO: Refactor to avoid a global variables
-    global prompt_tokens, completion_tokens
+    global messages, prompt_tokens, completion_tokens
 
     headers = {
         "Content-Type": "application/json",
@@ -88,6 +88,14 @@ def start_prompt(session, config):
 
     if message.lower() == "/q":
         raise EOFError
+    if message.lower() == "/n":
+        display_expense(model=config["model"])
+        messages = []
+        prompt_tokens = 0
+        completion_tokens = 0
+        greet(config, new=True)
+        raise KeyboardInterrupt
+    # TODO Implement session save and load
     if message.lower() == "":
         raise KeyboardInterrupt
 
@@ -145,6 +153,9 @@ def start_prompt(session, config):
         console.print(r.json())
         raise EOFError
 
+def greet(config, new=False):
+    console.print("ChatGPT CLI" + (" (new session)" if new else ""), style="bold")
+    console.print(f"Model in use: [green bold]{config['model']}")
 
 @click.command()
 @click.option(
@@ -163,8 +174,7 @@ def main(context) -> None:
     #Run the display expense function when exiting the script
     atexit.register(display_expense, model=config["model"])
 
-    console.print("ChatGPT CLI", style="bold")
-    console.print(f"Model in use: [green bold]{config['model']}")
+    greet(config)
 
     # Context from the command line option
     if context:
