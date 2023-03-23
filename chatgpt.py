@@ -1,7 +1,6 @@
 #!/home/kai/miniconda3/envs/chatgpt/bin/python
 
 import os
-import requests
 import sys
 
 import openai
@@ -21,7 +20,6 @@ from util import load_config, num_tokens_from_messages, calculate_expense
 
 
 CONFIG_FILE = os.path.expanduser("~/.chatgpt-cli.yaml")
-BASE_ENDPOINT = "https://api.openai.com/v1"
 
 PRICING_RATE = {
     "gpt-3.5-turbo": {"prompt": 0.002, "completion": 0.002},
@@ -30,110 +28,80 @@ PRICING_RATE = {
 }
 
 
-# Initialize the messages history list
-# It's mandatory to pass it at each API call in order to have a conversation
-messages = []
-# Initialize the token counters
-prompt_tokens = 0
-completion_tokens = 0
-# Initialize the console
-console = Console()
-
-
-def display_expense(model) -> None:
+def display_expense(console, model, session_info) -> None:
     """
     Given the model used, display total tokens used and estimated expense
     """
     total_expense = calculate_expense(
-        prompt_tokens,
-        completion_tokens,
+        session_info['prompt_tokens'],
+        session_info['completion_tokens'],
         PRICING_RATE[model]["prompt"],
         PRICING_RATE[model]["completion"],
     )
-    console.print(f"Total tokens used: [green bold]{prompt_tokens + completion_tokens}")
+    console.print(f"Total tokens used: [green bold]{session_info['prompt_tokens'] + session_info['completion_tokens']}")
     console.print(f"Estimated expense: [green bold]${total_expense}")
 
-first_token = True  # somehow the first token in each session is "\n\n"
-
-def start_prompt(session, config):
-    # TODO: Refactor to avoid a global variables
-    global first_token, messages, prompt_tokens, completion_tokens
-
-    # headers = {
-    #     "Content-Type": "application/json",
-    #     "Authorization": f"Bearer {config['api-key']}",
-    # }
-
-    message = session.prompt(HTML(f"<b>[{prompt_tokens + completion_tokens}] >>> </b>"))
+def start_prompt(console, session, config, session_info):
+    message = session.prompt(HTML(f"<b>[{session_info['prompt_tokens'] + session_info['completion_tokens']}] >>> </b>"))
 
     if message.lower() == "/q":
         raise EOFError
     if message.lower() == "/n":
-        display_expense(model=config["model"])
-        first_token = True
-        messages = []
-        prompt_tokens = 0
-        completion_tokens = 0
+        display_expense(console, config["model"], session_info)
+        session_info["messages"] = []
+        session_info["prompt_tokens"] = 0
+        session_info["completion_tokens"] = 0
+        session_info["first_token"] = True
         greet(config, new=True)
         raise KeyboardInterrupt
     # TODO Implement session save and load
     if message.lower() == "":
         raise KeyboardInterrupt
 
-    messages.append({"role": "user", "content": message})
-
-    # body = {"model": config["model"], "messages": messages}
+    session_info["messages"].append({"role": "user", "content": message})
 
     try:
-        # r = requests.post(
-        #     f"{BASE_ENDPOINT}/chat/completions", headers=headers, json=body
-        # )
         response = openai.ChatCompletion.create(
             model=config["model"],
-            messages=messages,
+            messages=session_info["messages"],
             stream=True,
         )
         assert next(response)['choices'][0]['delta']["role"] == "assistant", 'first response should be {"role": "assistant"}'
-        # print(response)
     except openai.error.AuthenticationError:
         console.print("Invalid API Key", style="bold red")
         raise EOFError
     except openai.error.RateLimitError:
         console.print("Rate limit or maximum monthly limit exceeded", style="bold red")
-        messages.pop()
+        session_info["messages"].pop()
         raise KeyboardInterrupt
     except openai.error.APIConnectionError:
         console.print("Connection error, try again...", style="red bold")
-        messages.pop()
+        session_info["messages"].pop()
         raise KeyboardInterrupt
     except openai.error.Timeout:
         console.print("Connection timed out, try again...", style="red bold")
-        messages.pop()
+        session_info["messages"].pop()
         raise KeyboardInterrupt
     except:
-        # console.print("Unknown error", style="bold red")
+        console.print("Unknown error", style="bold red")
         # raise EOFError
         raise
 
-    # message_response = response["choices"][0]["message"]
-    # usage_response = response["usage"]
-
-    # console.print(message_response["content"].strip())
     text = Text()
     with Live(text, console=console, refresh_per_second=5) as live:
         for chunk in response:
             chunk_message = chunk['choices'][0]['delta']
             if 'content' in chunk_message:
-                if first_token:
-                    first_token = False
+                if session_info["first_token"]:
+                    session_info["first_token"] = False
                 else:
                     text.append(chunk_message['content'])
                 # completion_tokens += 1
 
     # Update message history and token counters
-    prompt_tokens += num_tokens_from_messages(messages[-1:])
-    messages.append({"role": "assistant", "content": text.plain})
-    completion_tokens += num_tokens_from_messages(messages[-1:])
+    session_info["prompt_tokens"] += num_tokens_from_messages(session_info["messages"][-1:])
+    session_info["messages"].append({"role": "assistant", "content": text.plain})
+    session_info["completion_tokens"] += num_tokens_from_messages(session_info["messages"][-1:])
 
     # elif r.status_code == 400:
     #     response = r.json()
@@ -145,7 +113,7 @@ def start_prompt(session, config):
     #     console.print("Invalid request", style="bold red")
     #     raise EOFError
 
-def greet(config, new=False):
+def greet(console, config, new=False):
     console.print("ChatGPT CLI" + (" (new session)" if new else ""), style="bold")
     console.print(f"Model in use: [green bold]{config['model']}")
 
@@ -154,8 +122,17 @@ def greet(config, new=False):
     "-c", "--context", "context", type=click.File("r"), help="Path to a context file"
 )
 def main(context) -> None:
+    console = Console()
+
     history = FileHistory(".history")
     session = PromptSession(history=history)
+
+    session_info = {
+        "messages": [],
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "first_token": True, # somehow the first token in each session is "\n\n"
+    }
 
     try:
         config = load_config(CONFIG_FILE)
@@ -164,19 +141,19 @@ def main(context) -> None:
         console.print("Configuration file not found", style="red bold")
         sys.exit(1)
 
-    #Run the display expense function when exiting the script
+    # Run the display expense function when exiting the script
     atexit.register(display_expense, model=config["model"])
 
-    greet(config)
+    greet(console, config)
 
     # Context from the command line option
     if context:
         console.print(f"Context file: [green bold]{context.name}")
-        messages.append({"role": "system", "content": context.read().strip()})
+        session_info["messages"].append({"role": "system", "content": context.read().strip()})
 
     while True:
         try:
-            start_prompt(session, config)
+            start_prompt(console, session, config, session_info)
         except KeyboardInterrupt:
             continue
         except EOFError:
