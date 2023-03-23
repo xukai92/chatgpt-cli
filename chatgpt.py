@@ -1,4 +1,4 @@
-#!/home/kai/miniconda3/envs/chatgpt/bin/python
+#!/usr/bin/env python
 
 import os
 import sys
