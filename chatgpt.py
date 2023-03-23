@@ -27,133 +27,143 @@ PRICING_RATE = {
     "gpt-4-32k": {"prompt": 0.06, "completion": 0.12},
 }
 
+class ConsoleChatBot():
 
-def display_expense(console, model, session_info) -> None:
-    """
-    Given the model used, display total tokens used and estimated expense
-    """
-    total_expense = calculate_expense(
-        session_info['prompt_tokens'],
-        session_info['completion_tokens'],
-        PRICING_RATE[model]["prompt"],
-        PRICING_RATE[model]["completion"],
-    )
-    console.print(f"Total tokens used: [green bold]{session_info['prompt_tokens'] + session_info['completion_tokens']}")
-    console.print(f"Estimated expense: [green bold]${total_expense}")
+    def __init__(self):
+        console = Console()
 
-def start_prompt(console, session, config, session_info):
-    message = session.prompt(HTML(f"<b>[{session_info['prompt_tokens'] + session_info['completion_tokens']}] >>> </b>"))
+        try:
+            config = load_config(CONFIG_FILE)
+            openai.api_key = config['api-key']
+        except FileNotFoundError:
+            console.print("Configuration file not found", style="red bold")
+            sys.exit(1)
+        
+        self.console = console
+        self.model = config["model"]
+        self.input = PromptSession(history=FileHistory(".history"))
+        self.multiline = False
 
-    if message.lower() == "/q":
-        raise EOFError
-    if message.lower() == "/n":
-        display_expense(console, config["model"], session_info)
-        session_info["messages"] = []
-        session_info["prompt_tokens"] = 0
-        session_info["completion_tokens"] = 0
-        session_info["first_token"] = True
-        greet(config, new=True)
-        raise KeyboardInterrupt
-    # TODO Implement session save and load
-    if message.lower() == "":
-        raise KeyboardInterrupt
+        self.info = {}
+        self.reset_session()
 
-    session_info["messages"].append({"role": "user", "content": message})
+    def reset_session(self):
+        self.info["messages"] = []
+        self.info["prompt_tokens"] = 0
+        self.info["completion_tokens"] = 0
 
-    try:
-        response = openai.ChatCompletion.create(
-            model=config["model"],
-            messages=session_info["messages"],
-            stream=True,
+    def greet(self, new=False):
+        self.console.print("ChatGPT CLI" + (" (new session)" if new else ""), style="bold")
+        self.console.print(f"Model in use: [green bold]{self.model}")
+
+    def display_expense(self):
+        total_expense = calculate_expense(
+            self.info['prompt_tokens'],
+            self.info['completion_tokens'],
+            PRICING_RATE[self.model]["prompt"],
+            PRICING_RATE[self.model]["completion"],
         )
-        assert next(response)['choices'][0]['delta']["role"] == "assistant", 'first response should be {"role": "assistant"}'
-    except openai.error.AuthenticationError:
-        console.print("Invalid API Key", style="bold red")
-        raise EOFError
-    except openai.error.RateLimitError:
-        console.print("Rate limit or maximum monthly limit exceeded", style="bold red")
-        session_info["messages"].pop()
-        raise KeyboardInterrupt
-    except openai.error.APIConnectionError:
-        console.print("Connection error, try again...", style="red bold")
-        session_info["messages"].pop()
-        raise KeyboardInterrupt
-    except openai.error.Timeout:
-        console.print("Connection timed out, try again...", style="red bold")
-        session_info["messages"].pop()
-        raise KeyboardInterrupt
-    except:
-        console.print("Unknown error", style="bold red")
-        # raise EOFError
-        raise
+        self.console.print(f"Total tokens used: [green bold]{self.total_tokens}")
+        self.console.print(f"Estimated expense: [green bold]${total_expense}")
 
-    text = Text()
-    with Live(text, console=console, refresh_per_second=5) as live:
-        for chunk in response:
-            chunk_message = chunk['choices'][0]['delta']
-            if 'content' in chunk_message:
-                if session_info["first_token"]:
-                    session_info["first_token"] = False
-                else:
-                    text.append(chunk_message['content'])
-                # completion_tokens += 1
+    @property
+    def total_tokens(self):
+        return self.info['prompt_tokens'] + self.info['completion_tokens']
 
-    # Update message history and token counters
-    session_info["prompt_tokens"] += num_tokens_from_messages(session_info["messages"][-1:])
-    session_info["messages"].append({"role": "assistant", "content": text.plain})
-    session_info["completion_tokens"] += num_tokens_from_messages(session_info["messages"][-1:])
+    def start_prompt(self):
+        message = self.input.prompt(">>> ", rprompt=HTML(f"<b>[{self.total_tokens}]</b>"), vi_mode=True, multiline=self.multiline)
 
-    # elif r.status_code == 400:
-    #     response = r.json()
-    #     if "error" in response:
-    #         if response["error"]["code"] == "context_length_exceeded":
-    #             console.print("Maximum context length exceeded", style="red bold")
-    #             raise EOFError
-    #             # TODO: Develop a better strategy to manage this case
-    #     console.print("Invalid request", style="bold red")
-    #     raise EOFError
+        if message.lower() == "/q":
+            raise EOFError
+        if message.lower() == "/m": # toggle multiline
+            self.multiline = not self.multiline
+            raise KeyboardInterrupt
+        if message.lower() == "/n":
+            self.display_expense()
+            self.reset_session()
+            self.greet(new=True)
+            raise KeyboardInterrupt
+        # TODO Implement session save and load
+        if message.lower() == "":
+            raise KeyboardInterrupt
 
-def greet(console, config, new=False):
-    console.print("ChatGPT CLI" + (" (new session)" if new else ""), style="bold")
-    console.print(f"Model in use: [green bold]{config['model']}")
+        self.info["messages"].append({"role": "user", "content": message})
+
+        try:
+            response = openai.ChatCompletion.create(
+                model=self.model,
+                messages=self.info["messages"],
+                stream=True,
+            )
+            assert next(response)['choices'][0]['delta']["role"] == "assistant", 'first response should be {"role": "assistant"}'
+        except openai.error.AuthenticationError:
+            self.console.print("Invalid API Key", style="bold red")
+            raise EOFError
+        except openai.error.RateLimitError:
+            self.console.print("Rate limit or maximum monthly limit exceeded", style="bold red")
+            self.info["messages"].pop()
+            raise KeyboardInterrupt
+        except openai.error.APIConnectionError:
+            self.console.print("Connection error, try again...", style="red bold")
+            self.info["messages"].pop()
+            raise KeyboardInterrupt
+        except openai.error.Timeout:
+            self.console.print("Connection timed out, try again...", style="red bold")
+            self.info["messages"].pop()
+            raise KeyboardInterrupt
+        except:
+            self.console.print("Unknown error", style="bold red")
+            # raise EOFError
+            raise
+
+        text = Text("<<< ")
+        with Live(text, console=self.console, refresh_per_second=5) as live:
+            for chunk in response:
+                chunk_message = chunk['choices'][0]['delta']
+                if 'content' in chunk_message:
+                    content = chunk_message['content']
+                    if content == "\n\n":
+                        pass
+                    else:
+                        text.append(content)
+                    # completion_tokens += 1
+
+        # Update message history and token counters
+        self.info["prompt_tokens"] += num_tokens_from_messages(self.info["messages"][-1:])
+        self.info["messages"].append({"role": "assistant", "content": text.plain})
+        self.info["completion_tokens"] += num_tokens_from_messages(self.info["messages"][-1:])
+
+        # elif r.status_code == 400:
+        #     response = r.json()
+        #     if "error" in response:
+        #         if response["error"]["code"] == "context_length_exceeded":
+        #             console.print("Maximum context length exceeded", style="red bold")
+        #             raise EOFError
+        #             # TODO: Develop a better strategy to manage this case
+        #     console.print("Invalid request", style="bold red")
+        #     raise EOFError
+
 
 @click.command()
 @click.option(
     "-c", "--context", "context", type=click.File("r"), help="Path to a context file"
 )
 def main(context) -> None:
-    console = Console()
-
-    history = FileHistory(".history")
-    session = PromptSession(history=history)
-
-    session_info = {
-        "messages": [],
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "first_token": True, # somehow the first token in each session is "\n\n"
-    }
-
-    try:
-        config = load_config(CONFIG_FILE)
-        openai.api_key = config['api-key']
-    except FileNotFoundError:
-        console.print("Configuration file not found", style="red bold")
-        sys.exit(1)
+    ccb = ConsoleChatBot()
 
     # Run the display expense function when exiting the script
-    atexit.register(display_expense, model=config["model"])
+    atexit.register(ccb.display_expense)
 
-    greet(console, config)
+    ccb.greet()
 
     # Context from the command line option
     if context:
-        console.print(f"Context file: [green bold]{context.name}")
-        session_info["messages"].append({"role": "system", "content": context.read().strip()})
+        ccb.console.print(f"Context file: [green bold]{context.name}")
+        ccb.info["messages"].append({"role": "system", "content": context.read().strip()})
 
     while True:
         try:
-            start_prompt(console, session, config, session_info)
+            ccb.start_prompt()
         except KeyboardInterrupt:
             continue
         except EOFError:
