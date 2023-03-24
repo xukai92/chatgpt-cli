@@ -102,7 +102,6 @@ class ConsoleChatBot():
         if content.lower() == "/md":
             self.console.print(Panel(Markdown(self.info["messages"][-1]["content"]), subtitle_align="right", subtitle="rendered as Markdown"))
             raise KeyboardInterrupt
-        # TODO Implement session save and load
         if content.lower()[:3] == "/s ":
             fp = content[3:]
             with open(fp, "w") as outfile:
