@@ -74,26 +74,27 @@ class ConsoleChatBot():
         return self.info['prompt_tokens'] + self.info['completion_tokens']
 
     def start_prompt(self):
-        message = self.input.prompt(">>> ", rprompt=HTML(f"<b>[{self.total_tokens}]</b>"), vi_mode=True, multiline=self.multiline)
+        content = self.input.prompt(">>> ", rprompt=HTML(f"<b>[{self.total_tokens}]</b>"), vi_mode=True, multiline=self.multiline)
 
         # Parse input
-        if message.lower() == "/q":
+        if content.lower() == "/q":
             raise EOFError
-        if message.lower() == "/m": # toggle multiline
+        if content.lower() == "/m": # toggle multiline
             self.multiline = not self.multiline
             raise KeyboardInterrupt
-        if message.lower() == "/n":
+        if content.lower() == "/n":
             self.display_expense()
             self.reset_session()
             self.greet(new=True)
             raise KeyboardInterrupt
         # TODO Implement session save and load
-        if message.lower() == "":
+        if content.lower() == "":
             raise KeyboardInterrupt
 
         # Update message history and token counters
-        self.info["messages"].append({"role": "user", "content": message})
-        self.info["prompt_tokens"] += num_tokens_from_messages(message)
+        message = {"role": "user", "content": content}
+        self.info["messages"].append(message)
+        self.info["prompt_tokens"] += num_tokens_from_messages([message])
 
         # Parse response
         try:
@@ -134,8 +135,9 @@ class ConsoleChatBot():
                 panel.subtitle = f"elapsed {time.time() - start_time:.3f} seconds"
 
         # Update message history and token counters
-        self.info["messages"].append({"role": "assistant", "content": response_content.plain})
-        self.info["completion_tokens"] += num_tokens_from_messages(response_content.plain)
+        message = {"role": "assistant", "content": response_content.plain}
+        self.info["messages"].append(message)
+        self.info["completion_tokens"] += num_tokens_from_messages([message])
 
         # elif r.status_code == 400:
         #     response = r.json()
