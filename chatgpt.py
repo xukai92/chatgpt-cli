@@ -193,7 +193,7 @@ class ConsoleChatBot():
 
         response_content = Text()
         panel = Panel(response_content, title=self.model, subtitle_align="right")
-        with Live(panel, console=self.console, refresh_per_second=5, vertical_overflow="visible") as live:
+        with Live(panel, console=self.console, refresh_per_second=5) as live:
             start_time = time.time()
             for chunk in response:
                 chunk_message = chunk['choices'][0]['delta']
