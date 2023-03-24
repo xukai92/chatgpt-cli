@@ -19,6 +19,8 @@ from rich.markdown import Markdown
 
 import click
 
+import json
+
 import atexit
 
 from util import num_tokens_from_messages, calculate_expense
@@ -35,10 +37,10 @@ PRICING_RATE = {
 
 class ConsoleChatBot():
 
-    def __init__(self, model, context_message=None):
+    def __init__(self, model, context_messages=None):
         
         self.model = model
-        self.context_message = context_message
+        self.context_messages = context_messages
 
         self.console = Console()
         self.input = PromptSession(history=FileHistory(".history"))
@@ -49,7 +51,7 @@ class ConsoleChatBot():
         self.reset_session()
 
     def reset_session(self):
-        self.info["messages"] = [] if self.context_message is None else [self.context_message]
+        self.info["messages"] = [] if self.context_messages is None else self.context_messages
         self.info["tokens"] = {"user": 0, "assistant": 0}
 
     def greet(self, new=False):
@@ -94,10 +96,24 @@ class ConsoleChatBot():
             self.reset_session()
             self.greet(new=True)
             raise KeyboardInterrupt
+        if content.lower() == "/p":
+            self.console.print(self.info["messages"][-1]["content"])
+            raise KeyboardInterrupt
         if content.lower() == "/md":
             self.console.print(Panel(Markdown(self.info["messages"][-1]["content"]), subtitle_align="right", subtitle="rendered as Markdown"))
             raise KeyboardInterrupt
         # TODO Implement session save and load
+        if content.lower()[:3] == "/s ":
+            fp = content[3:]
+            with open(fp, "w") as outfile:
+                json.dump(self.info["messages"], outfile)
+            raise KeyboardInterrupt
+        if content.lower()[:3] == "/l ":
+            fp = content[3:]
+            with open(fp, "r") as session:
+                context_messages = json.loads(session.read())
+                self.info["messages"] = context_messages
+            raise KeyboardInterrupt
         if content.lower().strip() == "":
             raise KeyboardInterrupt
 
@@ -158,7 +174,12 @@ class ConsoleChatBot():
 @click.option(
     "-c", "--context", "context", type=click.File("r"), help="Path to a context file"
 )
-def main(context) -> None:
+@click.option(
+    "-s", "--session", "session", type=click.File("r"), help="Path to a session file"
+)
+def main(context, session) -> None:
+    assert (context is None) or (session is None), "Cannot load context and session in the same time"
+
     # Load model and API key
     try:
         with open(CONFIG_FILEPATH) as file:
@@ -174,14 +195,18 @@ def main(context) -> None:
         sys.exit(1)
 
     # Context from the command line option
-    if context:
+    context_messages = None
+    if context is not None:
         print(f"Loaded context file: {context.name}")
-        context_message = {"role": "system", "content": context.read().strip()}
-    else:
-        context_message = None
+        context_messages = [{"role": "system", "content": context.read().strip()}]
+
+    # Session from the command line option
+    if session is not None:
+        print(f"Loaded session file: {session.name}")
+        context_messages = json.loads(session.read())
 
     # Init chat bot
-    ccb = ConsoleChatBot(config["model"], context_message=context_message)
+    ccb = ConsoleChatBot(config["model"], context_messages=context_messages)
 
     # Run the display expense function when exiting the script
     atexit.register(ccb.display_expense)
