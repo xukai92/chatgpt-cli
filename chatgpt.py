@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 
 import openai
 
@@ -11,6 +12,7 @@ from prompt_toolkit.history import FileHistory
 from rich.console import Console
 from rich.live import Live
 from rich.text import Text
+from rich.panel import Panel
 
 import click
 
@@ -26,6 +28,7 @@ PRICING_RATE = {
     "gpt-4": {"prompt": 0.03, "completion": 0.06},
     "gpt-4-32k": {"prompt": 0.06, "completion": 0.12},
 }
+
 
 class ConsoleChatBot():
 
@@ -73,6 +76,7 @@ class ConsoleChatBot():
     def start_prompt(self):
         message = self.input.prompt(">>> ", rprompt=HTML(f"<b>[{self.total_tokens}]</b>"), vi_mode=True, multiline=self.multiline)
 
+        # Parse input
         if message.lower() == "/q":
             raise EOFError
         if message.lower() == "/m": # toggle multiline
@@ -87,8 +91,11 @@ class ConsoleChatBot():
         if message.lower() == "":
             raise KeyboardInterrupt
 
+        # Update message history and token counters
         self.info["messages"].append({"role": "user", "content": message})
+        self.info["prompt_tokens"] += num_tokens_from_messages(message)
 
+        # Parse response
         try:
             response = openai.ChatCompletion.create(
                 model=self.model,
@@ -116,22 +123,19 @@ class ConsoleChatBot():
             # raise EOFError
             raise
 
-        text = Text("<<< ")
-        with Live(text, console=self.console, refresh_per_second=5) as live:
+        response_content = Text()
+        panel = Panel(response_content, subtitle_align="right")
+        with Live(panel, console=self.console, refresh_per_second=5) as live:
+            start_time = time.time()
             for chunk in response:
                 chunk_message = chunk['choices'][0]['delta']
                 if 'content' in chunk_message:
-                    content = chunk_message['content']
-                    if content == "\n\n":
-                        pass
-                    else:
-                        text.append(content)
-                    # completion_tokens += 1
+                    response_content.append(chunk_message['content'])
+                panel.subtitle = f"elapsed {time.time() - start_time:.3f} seconds"
 
         # Update message history and token counters
-        self.info["prompt_tokens"] += num_tokens_from_messages(self.info["messages"][-1:])
-        self.info["messages"].append({"role": "assistant", "content": text.plain})
-        self.info["completion_tokens"] += num_tokens_from_messages(self.info["messages"][-1:])
+        self.info["messages"].append({"role": "assistant", "content": response_content.plain})
+        self.info["completion_tokens"] += num_tokens_from_messages(response_content.plain)
 
         # elif r.status_code == 400:
         #     response = r.json()
