@@ -1,21 +1,5 @@
-import yaml
-
 import tiktoken
 
-
-def load_config(config_file: str) -> dict:
-    """
-    Read a YAML config file and returns it's content as a dictionary
-    """
-    with open(config_file) as file:
-        config = yaml.load(file, Loader=yaml.FullLoader)
-    if not config["api-key"].startswith("sk"):
-        config["api-key"] = os.environ.get("OAI_SECRET_KEY", "fail")
-    while not config["api-key"].startswith("sk"):
-        config["api-key"] = input(
-            "Enter your OpenAI Secret Key (should start with 'sk-')\n"
-        )
-    return config
 
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
   """Returns the number of tokens used by a list of messages."""

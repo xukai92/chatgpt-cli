@@ -3,6 +3,7 @@
 import os
 import sys
 import time
+import yaml
 
 import openai
 
@@ -19,10 +20,10 @@ import click
 
 import atexit
 
-from util import load_config, num_tokens_from_messages, calculate_expense
+from util import num_tokens_from_messages, calculate_expense
 
 
-CONFIG_FILE = os.path.expanduser("~/.chatgpt-cli.yaml")
+CONFIG_FILEPATH = os.path.expanduser("~/.chatgpt-cli.yaml")
 
 PRICING_RATE = {
     "gpt-3.5-turbo": {"prompt": 0.002, "completion": 0.002},
@@ -33,18 +34,12 @@ PRICING_RATE = {
 
 class ConsoleChatBot():
 
-    def __init__(self):
-        console = Console()
-
-        try:
-            config = load_config(CONFIG_FILE)
-            openai.api_key = config['api-key']
-        except FileNotFoundError:
-            console.print("Configuration file not found", style="red bold")
-            sys.exit(1)
+    def __init__(self, model, context_message=None):
         
-        self.console = console
-        self.model = config["model"]
+        self.model = model
+        self.context_message = context_message
+
+        self.console = Console()
         self.input = PromptSession(history=FileHistory(".history"))
         self.multiline = False
         self.multiline_mode = 0
@@ -53,7 +48,7 @@ class ConsoleChatBot():
         self.reset_session()
 
     def reset_session(self):
-        self.info["messages"] = []
+        self.info["messages"] = [] if self.context_message is None else [self.context_message]
         self.info["prompt_tokens"] = 0
         self.info["completion_tokens"] = 0
 
@@ -169,18 +164,35 @@ class ConsoleChatBot():
     "-c", "--context", "context", type=click.File("r"), help="Path to a context file"
 )
 def main(context) -> None:
-    ccb = ConsoleChatBot()
+    # Load model and API key
+    try:
+        with open(CONFIG_FILEPATH) as file:
+            config = yaml.load(file, Loader=yaml.FullLoader)
+        openai.api_key = config['api-key']
+    except FileNotFoundError:
+        print("Configuration file not found. Please copy `chatgpt-cli.yaml` from the repo root to your home as `~/.chatgpt-cli.yaml`.")
+        sys.exit(1)
+    if not config["api-key"].startswith("sk"):
+        config["api-key"] = os.environ.get("OAI_SECRET_KEY", "fail")
+    if not config["api-key"].startswith("sk"):
+        print("API key incorrect. Please make sure it's set in `~/.chatgpt-cli.yaml` or via environment variable `OAI_SECRET_KEY`.")
+        sys.exit(1)
+
+    # Context from the command line option
+    if context:
+        print(f"Loaded context file: {context.name}")
+        context_message = {"role": "system", "content": context.read().strip()}
+    else:
+        context_message = None
+
+    # Init chat bot
+    ccb = ConsoleChatBot(config["model"], context_message=context_message)
 
     # Run the display expense function when exiting the script
     atexit.register(ccb.display_expense)
 
+    # Greet and start chat
     ccb.greet()
-
-    # Context from the command line option
-    if context:
-        ccb.console.print(f"Context file: [green bold]{context.name}")
-        ccb.info["messages"].append({"role": "system", "content": context.read().strip()})
-
     while True:
         try:
             ccb.start_prompt()
