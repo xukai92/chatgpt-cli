@@ -7,7 +7,9 @@ import yaml
 
 import openai
 
-from prompt_toolkit import PromptSession, HTML
+from prompt_toolkit import PromptSession
+from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit.styles import Style
 from prompt_toolkit.history import FileHistory
 
 from rich.console import Console
@@ -49,8 +51,7 @@ class ConsoleChatBot():
 
     def reset_session(self):
         self.info["messages"] = [] if self.context_message is None else [self.context_message]
-        self.info["prompt_tokens"] = 0
-        self.info["completion_tokens"] = 0
+        self.info["tokens"] = {"user": 0, "assistant": 0}
 
     def greet(self, new=False):
         self.console.print("ChatGPT CLI" + (" (new session)" if new else ""), style="bold")
@@ -58,8 +59,8 @@ class ConsoleChatBot():
 
     def display_expense(self):
         total_expense = calculate_expense(
-            self.info['prompt_tokens'],
-            self.info['completion_tokens'],
+            self.info["tokens"]["user"],
+            self.info["tokens"]["assistant"],
             PRICING_RATE[self.model]["prompt"],
             PRICING_RATE[self.model]["completion"],
         )
@@ -67,11 +68,16 @@ class ConsoleChatBot():
         self.console.print(f"Estimated expense: [green bold]${total_expense}")
 
     @property
-    def total_tokens(self):
-        return self.info['prompt_tokens'] + self.info['completion_tokens']
+    def total_tokens(self): return self.info["tokens"]["user"] + self.info["tokens"]["assistant"]
+
+    @property
+    def rprompt(self): return FormattedText([
+        ('#85bb65 bold', f"[{self.total_tokens}]"), # dollar green
+        ('#3f7cac bold', f"[{'M' if self.multiline else 'S'}]"), # info blue
+    ])
 
     def start_prompt(self):
-        content = self.input.prompt(">>> ", rprompt=HTML(f"<b>[{self.total_tokens}][{'M' if self.multiline else 'S'}]</b>"), vi_mode=True, multiline=self.multiline)
+        content = self.input.prompt(">>> ", rprompt=self.rprompt, vi_mode=True, multiline=self.multiline)
 
         # Parse input
         if content.lower() == "/q":
@@ -96,10 +102,7 @@ class ConsoleChatBot():
         if content.lower().strip() == "":
             raise KeyboardInterrupt
 
-        # Update message history and token counters
-        message = {"role": "user", "content": content}
-        self.info["messages"].append(message)
-        self.info["prompt_tokens"] += num_tokens_from_messages([message])
+        self.update_conversation(content, "user")
 
         if self.multiline_mode == 2:
             self.multiline_mode = 0
@@ -130,7 +133,6 @@ class ConsoleChatBot():
             raise KeyboardInterrupt
         except:
             self.console.print("Unknown error", style="bold red")
-            # raise EOFError
             raise
 
         response_content = Text()
@@ -144,19 +146,13 @@ class ConsoleChatBot():
                 panel.subtitle = f"elapsed {time.time() - start_time:.3f} seconds"
 
         # Update message history and token counters
-        message = {"role": "assistant", "content": response_content.plain}
-        self.info["messages"].append(message)
-        self.info["completion_tokens"] += num_tokens_from_messages([message])
+        self.update_conversation(response_content.plain, "assistant")
 
-        # elif r.status_code == 400:
-        #     response = r.json()
-        #     if "error" in response:
-        #         if response["error"]["code"] == "context_length_exceeded":
-        #             console.print("Maximum context length exceeded", style="red bold")
-        #             raise EOFError
-        #             # TODO: Develop a better strategy to manage this case
-        #     console.print("Invalid request", style="bold red")
-        #     raise EOFError
+    def update_conversation(self, content, role):
+        assert role in ("user", "assistant")
+        message = {"role": role, "content": content}
+        self.info["messages"].append(message)
+        self.info["tokens"][role] += num_tokens_from_messages([message])
 
 
 @click.command()
