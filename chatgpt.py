@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.live import Live
 from rich.text import Text
 from rich.panel import Panel
+from rich.markdown import Markdown
 
 import click
 
@@ -25,8 +26,8 @@ CONFIG_FILE = os.path.expanduser("~/.chatgpt-cli.yaml")
 
 PRICING_RATE = {
     "gpt-3.5-turbo": {"prompt": 0.002, "completion": 0.002},
-    "gpt-4": {"prompt": 0.03, "completion": 0.06},
-    "gpt-4-32k": {"prompt": 0.06, "completion": 0.12},
+    "gpt-4":         {"prompt": 0.03,  "completion": 0.06},
+    "gpt-4-32k":     {"prompt": 0.06,  "completion": 0.12},
 }
 
 
@@ -46,6 +47,7 @@ class ConsoleChatBot():
         self.model = config["model"]
         self.input = PromptSession(history=FileHistory(".history"))
         self.multiline = False
+        self.multiline_mode = 0
 
         self.info = {}
         self.reset_session()
@@ -74,27 +76,39 @@ class ConsoleChatBot():
         return self.info['prompt_tokens'] + self.info['completion_tokens']
 
     def start_prompt(self):
-        content = self.input.prompt(">>> ", rprompt=HTML(f"<b>[{self.total_tokens}]</b>"), vi_mode=True, multiline=self.multiline)
+        content = self.input.prompt(">>> ", rprompt=HTML(f"<b>[{self.total_tokens}][{'M' if self.multiline else 'S'}]</b>"), vi_mode=True, multiline=self.multiline)
 
         # Parse input
         if content.lower() == "/q":
             raise EOFError
-        if content.lower() == "/m": # toggle multiline
+        if content == "/M": # multiline (mode 1)
             self.multiline = not self.multiline
+            self.multiline_mode = 1
+            raise KeyboardInterrupt
+        if content == "/m": # multiline (temp, mode 2)
+            self.multiline = not self.multiline
+            self.multiline_mode = 2
             raise KeyboardInterrupt
         if content.lower() == "/n":
             self.display_expense()
             self.reset_session()
             self.greet(new=True)
             raise KeyboardInterrupt
+        if content.lower() == "/md":
+            self.console.print(Panel(Markdown(self.info["messages"][-1]["content"]), subtitle_align="right", subtitle="rendered as Markdown"))
+            raise KeyboardInterrupt
         # TODO Implement session save and load
-        if content.lower() == "":
+        if content.lower().strip() == "":
             raise KeyboardInterrupt
 
         # Update message history and token counters
         message = {"role": "user", "content": content}
         self.info["messages"].append(message)
         self.info["prompt_tokens"] += num_tokens_from_messages([message])
+
+        if self.multiline_mode == 2:
+            self.multiline_mode = 0
+            self.multiline = not self.multiline
 
         # Parse response
         try:
