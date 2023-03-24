@@ -3,13 +3,12 @@
 import os
 import sys
 import time
-import yaml
+import toml
 
 import openai
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import FormattedText
-from prompt_toolkit.styles import Style
 from prompt_toolkit.history import FileHistory
 
 from rich.console import Console
@@ -25,7 +24,7 @@ import atexit
 from util import num_tokens_from_messages, calculate_expense
 
 
-CONFIG_FILEPATH = os.path.expanduser("~/.chatgpt-cli.yaml")
+CONFIG_FILEPATH = os.path.expanduser("~/.chatgpt-cli.toml")
 
 PRICING_RATE = {
     "gpt-3.5-turbo": {"prompt": 0.002, "completion": 0.002},
@@ -163,15 +162,15 @@ def main(context) -> None:
     # Load model and API key
     try:
         with open(CONFIG_FILEPATH) as file:
-            config = yaml.load(file, Loader=yaml.FullLoader)
+            config = toml.load(file)
         openai.api_key = config['api-key']
     except FileNotFoundError:
-        print("Configuration file not found. Please copy `chatgpt-cli.yaml` from the repo root to your home as `~/.chatgpt-cli.yaml`.")
+        print("Configuration file not found. Please copy `chatgpt-cli.toml` from the repo root to your home as `~/.chatgpt-cli.toml`.")
         sys.exit(1)
     if not config["api-key"].startswith("sk"):
         config["api-key"] = os.environ.get("OAI_SECRET_KEY", "fail")
     if not config["api-key"].startswith("sk"):
-        print("API key incorrect. Please make sure it's set in `~/.chatgpt-cli.yaml` or via environment variable `OAI_SECRET_KEY`.")
+        print("API key incorrect. Please make sure it's set in `~/.chatgpt-cli.toml` or via environment variable `OAI_SECRET_KEY`.")
         sys.exit(1)
 
     # Context from the command line option
