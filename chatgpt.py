@@ -26,6 +26,11 @@ import atexit
 from util import num_tokens_from_messages, calculate_expense
 
 
+HELP_MD = """# Help / TL;DR
+- '/q': quit
+- '/h': show help
+"""
+
 CONFIG_FILEPATH = os.path.expanduser("~/.chatgpt-cli.toml")
 
 PRICING_RATE = {
@@ -37,10 +42,10 @@ PRICING_RATE = {
 
 class ConsoleChatBot():
 
-    def __init__(self, model, context_messages=None):
+    def __init__(self, model, loaded={}):
         
         self.model = model
-        self.context_messages = context_messages
+        self.loaded = loaded
 
         self.console = Console()
         self.input = PromptSession(history=FileHistory(".history"))
@@ -50,13 +55,15 @@ class ConsoleChatBot():
         self.info = {}
         self.reset_session()
 
-    def reset_session(self):
-        self.info["messages"] = [] if self.context_messages is None else self.context_messages
+    def reset_session(self, hard=False):
+        if hard:
+            self.loaded = {}
+        self.info["messages"] = [] if hard or ("messages" not in self.loaded) else [*self.loaded["messages"]]
         self.info["tokens"] = {"user": 0, "assistant": 0}
+        # TODO Double check if token calculation is still correct with self.loaded and history
 
-    def greet(self, new=False):
-        self.console.print("ChatGPT CLI" + (" (new session)" if new else ""), style="bold")
-        self.console.print(f"Model in use: [green bold]{self.model}")
+    def greet(self, new=False, session_name="new session"):
+        self.console.print("ChatGPT CLI" + (f" ({session_name})" if new else ""), style="bold")
 
     def display_expense(self):
         total_expense = calculate_expense(
@@ -72,17 +79,22 @@ class ConsoleChatBot():
     def total_tokens(self): return self.info["tokens"]["user"] + self.info["tokens"]["assistant"]
 
     @property
-    def rprompt(self): return FormattedText([
-        ('#85bb65 bold', f"[{self.total_tokens}]"), # dollar green
-        ('#3f7cac bold', f"[{'M' if self.multiline else 'S'}]"), # info blue
-    ])
+    def rprompt(self): return FormattedText(
+        [
+            ('#85bb65 bold', f"[{self.total_tokens}]"), # dollar green
+            ('#3f7cac bold', f"[{'M' if self.multiline else 'S'}]"), # info blue
+        ] + ([('bold', f"[{self.loaded['name']}]")] if "name" in self.loaded else [])
+    )
 
     def start_prompt(self):
         content = self.input.prompt(">>> ", rprompt=self.rprompt, vi_mode=True, multiline=self.multiline)
 
         # Parse input
-        if content.lower() == "/q":
+        if content.lower() == "/q": # quit
             raise EOFError
+        if content.lower() == "/h": # help
+            self.console.print(Markdown(HELP_MD))
+            raise KeyboardInterrupt
         if content == "/M": # multiline (mode 1)
             self.multiline = not self.multiline
             self.multiline_mode = 1
@@ -91,27 +103,38 @@ class ConsoleChatBot():
             self.multiline = not self.multiline
             self.multiline_mode = 2
             raise KeyboardInterrupt
-        if content.lower() == "/n":
+        if content.lower() == "/n": # new session
             self.display_expense()
-            self.reset_session()
+            self.reset_session(
+                hard=(content == "/N") # hard new ignores loaded context/session
+            )
             self.greet(new=True)
             raise KeyboardInterrupt
-        if content.lower() == "/p":
+        if content.lower() == "/p": # plain (of previous response)
             self.console.print(self.info["messages"][-1]["content"])
             raise KeyboardInterrupt
-        if content.lower() == "/md":
+        if content.lower() == "/md": # markdown (of previous response)
             self.console.print(Panel(Markdown(self.info["messages"][-1]["content"]), subtitle_align="right", subtitle="rendered as Markdown"))
             raise KeyboardInterrupt
-        if content.lower()[:3] == "/s ":
+        if content[:3].lower() == "/s ": # save session
             fp = content[3:]
             with open(fp, "w") as outfile:
                 json.dump(self.info["messages"], outfile)
             raise KeyboardInterrupt
-        if content.lower()[:3] == "/l ":
+        if content[:3].lower() == "/l ": # load session
+            self.display_expense()
             fp = content[3:]
             with open(fp, "r") as session:
-                context_messages = json.loads(session.read())
-                self.info["messages"] = context_messages
+                messages = json.loads(session.read())
+            if content[:2] == "/L":
+                self.loaded["name"] = fp
+                self.loaded["messages"] = messages
+                self.reset_session()
+                self.greet(new=True)
+            else:
+                self.reset_session()
+                self.info["messages"] = [*messages]
+                self.greet(new=True, session_name=fp)
             raise KeyboardInterrupt
         if content.lower().strip() == "":
             raise KeyboardInterrupt
@@ -150,7 +173,7 @@ class ConsoleChatBot():
             raise
 
         response_content = Text()
-        panel = Panel(response_content, subtitle_align="right")
+        panel = Panel(response_content, title=self.model, subtitle_align="right")
         with Live(panel, console=self.console, refresh_per_second=5) as live:
             start_time = time.time()
             for chunk in response:
@@ -194,18 +217,18 @@ def main(context, session) -> None:
         sys.exit(1)
 
     # Context from the command line option
-    context_messages = None
+    loaded = {}
     if context is not None:
-        print(f"Loaded context file: {context.name}")
-        context_messages = [{"role": "system", "content": context.read().strip()}]
+        loaded["name"] = context.name
+        loaded["messages"] = [{"role": "system", "content": context.read().strip()}]
 
     # Session from the command line option
     if session is not None:
-        print(f"Loaded session file: {session.name}")
-        context_messages = json.loads(session.read())
+        loaded["name"] = session.name
+        loaded["messages"] = json.loads(session.read())
 
     # Init chat bot
-    ccb = ConsoleChatBot(config["model"], context_messages=context_messages)
+    ccb = ConsoleChatBot(config["model"], loaded=loaded)
 
     # Run the display expense function when exiting the script
     atexit.register(ccb.display_expense)
