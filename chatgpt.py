@@ -27,8 +27,18 @@ from util import num_tokens_from_messages, calculate_expense
 
 
 HELP_MD = """# Help / TL;DR
-- '/q': quit
-- '/h': show help
+- `/q`: quit
+- `/h`: show help
+- `/m`: toggle multiline (for the next session only)
+- `/M`: toggle multiline
+- `/n`: new session
+- `/N`: new session (ignoring loaded)
+- `/p`: previous response in plain text
+- `/md`: previous response in Markdown
+- `/s fn`: save current session to `fn`
+- `/l fn`: load `fn` and start a new session
+- `/L fn`: load `fn` (permanently) and start a new session
+---
 """
 
 CONFIG_FILEPATH = os.path.expanduser("~/.chatgpt-cli.toml")
@@ -62,8 +72,8 @@ class ConsoleChatBot():
         self.info["tokens"] = {"user": 0, "assistant": 0}
         # TODO Double check if token calculation is still correct with self.loaded and history
 
-    def greet(self, new=False, session_name="new session"):
-        self.console.print("ChatGPT CLI" + (f" ({session_name})" if new else ""), style="bold")
+    def greet(self, help=False, new=False, session_name="new session"):
+        self.console.print("ChatGPT CLI" + (" (type /h for help)" if help else "") + (f" ({session_name})" if new else ""), style="bold")
 
     def display_expense(self):
         total_expense = calculate_expense(
@@ -234,7 +244,7 @@ def main(context, session) -> None:
     atexit.register(ccb.display_expense)
 
     # Greet and start chat
-    ccb.greet()
+    ccb.greet(help=True)
     while True:
         try:
             ccb.start_prompt()
