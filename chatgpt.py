@@ -33,6 +33,7 @@ HELP_MD = """# Help / TL;DR
 - `/M`: toggle multiline
 - `/n`: new session
 - `/N`: new session (ignoring loaded)
+- `/d`: previous response in console
 - `/p`: previous response in plain text
 - `/md`: previous response in Markdown
 - `/s fn`: save current session to `fn`
@@ -120,6 +121,9 @@ class ConsoleChatBot():
             )
             self.greet(new=True)
             raise KeyboardInterrupt
+        if content.lower() == "/d": # display (of previous response)
+            self.console.print(Panel(self.info["messages"][-1]["content"]))
+            raise KeyboardInterrupt
         if content.lower() == "/p": # plain (of previous response)
             self.console.print(self.info["messages"][-1]["content"])
             raise KeyboardInterrupt
@@ -184,7 +188,7 @@ class ConsoleChatBot():
 
         response_content = Text()
         panel = Panel(response_content, title=self.model, subtitle_align="right")
-        with Live(panel, console=self.console, refresh_per_second=5) as live:
+        with Live(panel, console=self.console, refresh_per_second=5, vertical_overflow="visible") as live:
             start_time = time.time()
             for chunk in response:
                 chunk_message = chunk['choices'][0]['delta']
