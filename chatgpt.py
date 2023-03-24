@@ -27,18 +27,18 @@ from util import num_tokens_from_messages, calculate_expense
 
 
 HELP_MD = """# Help / TL;DR
-- `/q`: quit
-- `/h`: show help
-- `/m`: toggle multiline (for the next session only)
-- `/M`: toggle multiline
-- `/n`: new session
-- `/N`: new session (ignoring loaded)
-- `/d`: previous response in console
-- `/p`: previous response in plain text
-- `/md`: previous response in Markdown
-- `/s fn`: save current session to `fn`
-- `/l fn`: load `fn` and start a new session
-- `/L fn`: load `fn` (permanently) and start a new session
+- `/q`: **q**uit
+- `/h`: show **h**elp
+- `/m`: toggle **m**ultiline (for the next session only)
+- `/M`: toggle **m**ultiline
+- `/n`: **n**ew session
+- `/N`: **n**ew session (ignoring loaded)
+- `/d [1]`: **d**isplay previous response
+- `/p [1]`: previous response in **p**lain text
+- `/md [1]`: previous response in **M**ark**d**own
+- `/s fn`: **s**ave current session to `fn`
+- `/l fn`: **l**oad `fn` and start a new session
+- `/L fn`: **l**oad `fn` (permanently) and start a new session
 ---
 """
 
@@ -71,7 +71,6 @@ class ConsoleChatBot():
             self.loaded = {}
         self.info["messages"] = [] if hard or ("messages" not in self.loaded) else [*self.loaded["messages"]]
         self.info["tokens"] = {"user": 0, "assistant": 0}
-        # TODO Double check if token calculation is still correct with self.loaded and history
 
     def greet(self, help=False, new=False, session_name="new session"):
         self.console.print("ChatGPT CLI" + (" (type /h for help)" if help else "") + (f" ({session_name})" if new else ""), style="bold")
@@ -121,14 +120,20 @@ class ConsoleChatBot():
             )
             self.greet(new=True)
             raise KeyboardInterrupt
-        if content.lower() == "/d": # display (of previous response)
-            self.console.print(Panel(self.info["messages"][-1]["content"]))
+        if content[:2].lower() == "/d": # display (of previous response) in console
+            i = 1 if len(content) == 2 else int(content[3:]) * 2 - 1
+            if len(self.info["messages"]) > i:
+                self.console.print(Panel(self.info["messages"][-i]["content"]))
             raise KeyboardInterrupt
-        if content.lower() == "/p": # plain (of previous response)
-            self.console.print(self.info["messages"][-1]["content"])
+        if content[:2].lower() == "/p": # plain (of previous response)
+            i = 1 if len(content) == 2 else int(content[3:]) * 2 - 1
+            if len(self.info["messages"]) > i:
+                self.console.print(self.info["messages"][-i]["content"])
             raise KeyboardInterrupt
-        if content.lower() == "/md": # markdown (of previous response)
-            self.console.print(Panel(Markdown(self.info["messages"][-1]["content"]), subtitle_align="right", subtitle="rendered as Markdown"))
+        if content[:3].lower() == "/md": # markdown (of previous response)
+            i = 1 if len(content) == 3 else int(content[4:]) * 2 - 1
+            if len(self.info["messages"]) > i:
+                self.console.print(Panel(Markdown(self.info["messages"][-i]["content"]), subtitle_align="right", subtitle="rendered as Markdown"))
             raise KeyboardInterrupt
         if content[:3].lower() == "/s ": # save session
             fp = content[3:]
@@ -203,7 +208,9 @@ class ConsoleChatBot():
         assert role in ("user", "assistant")
         message = {"role": role, "content": content}
         self.info["messages"].append(message)
-        self.info["tokens"][role] += num_tokens_from_messages([message])
+        self.info["tokens"][role] += num_tokens_from_messages(
+            self.info["messages"] if role == "user" else [message]
+        )
 
 
 @click.command()
