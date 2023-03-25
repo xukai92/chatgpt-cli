@@ -29,6 +29,7 @@ from util import num_tokens_from_messages, calculate_expense
 HELP_MD = """# Help / TL;DR
 - `/q`: **q**uit
 - `/h`: show **h**elp
+- `/a model`: **a**mend **a**ssistant
 - `/m`: toggle **m**ultiline (for the next session only)
 - `/M`: toggle **m**ultiline
 - `/n`: **n**ew session
@@ -36,9 +37,9 @@ HELP_MD = """# Help / TL;DR
 - `/d [1]`: **d**isplay previous response
 - `/p [1]`: previous response in **p**lain text
 - `/md [1]`: previous response in **M**ark**d**own
-- `/s fn`: **s**ave current session to `fn`
-- `/l fn`: **l**oad `fn` and start a new session
-- `/L fn`: **l**oad `fn` (permanently) and start a new session
+- `/s filename`: **s**ave current session to `filename`
+- `/l filename`: **l**oad `filename` and start a new session
+- `/L filename`: **l**oad `filename` (permanently) and start a new session
 ---
 """
 
@@ -104,6 +105,12 @@ class ConsoleChatBot():
             raise EOFError
         if content.lower() == "/h": # help
             self.console.print(Markdown(HELP_MD))
+            raise KeyboardInterrupt
+        if content.lower()[:2] == "/a": # amend assistant
+            self.display_expense()
+            self.model = content[3:]
+            self.reset_session()
+            self.greet(new=True)
             raise KeyboardInterrupt
         if content == "/M": # multiline (mode 1)
             self.multiline = not self.multiline
