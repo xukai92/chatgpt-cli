@@ -54,9 +54,10 @@ PRICING_RATE = {
 
 class ConsoleChatBot():
 
-    def __init__(self, model, loaded={}):
+    def __init__(self, model, vi_mode=False, loaded={}):
         
         self.model = model
+        self.vi_mode = vi_mode
         self.loaded = loaded
 
         self.console = Console()
@@ -284,7 +285,7 @@ def main(context, session) -> None:
         loaded["messages"] = json.loads(session.read())
 
     # Init chat bot
-    ccb = ConsoleChatBot(config["model"], loaded=loaded)
+    ccb = ConsoleChatBot(config["model"], vi_mode=config["vi_mode"], loaded=loaded)
 
     # Run the display expense function when exiting the script
     atexit.register(ccb.display_expense)

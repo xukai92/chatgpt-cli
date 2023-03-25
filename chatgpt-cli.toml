@@ -1,2 +1,3 @@
 api-key = ""
 model = "gpt-3.5-turbo"
+vi_mode = false
