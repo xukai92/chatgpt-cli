@@ -252,10 +252,10 @@ class ConsoleChatBot():
 
 @click.command()
 @click.option(
-    "-c", "--context", "context", type=click.File("r"), help="Path to a context file"
+    "-c", "--context", "context", type=click.File("r"), help="Path to a system context file"
 )
 @click.option(
-    "-s", "--session", "session", type=click.File("r"), help="Path to a session file"
+    "-s", "--session", "session", type=click.File("r"), help="Path to a dialog session file"
 )
 def main(context, session) -> None:
     assert (context is None) or (session is None), "Cannot load context and session in the same time"
