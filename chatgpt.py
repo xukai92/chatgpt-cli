@@ -85,19 +85,21 @@ class ConsoleChatBot():
             PRICING_RATE[self.model]["prompt"],
             PRICING_RATE[self.model]["completion"],
         )
-        self.console.print(f"Total tokens used: [green bold]{self._total_tokens}")
-        self.console.print(f"Estimated expense: [green bold]${total_expense}")
+        self.console.print(Panel(
+            f"Total tokens used: [green bold]{self._total_tokens}[/green bold]\n"
+            f"Estimated expense: [green bold]${total_expense}[/green bold]",
+            title="system"
+        ))
 
     @property
     def _total_tokens(self): return self.info["tokens"]["user"] + self.info["tokens"]["assistant"]
 
     @property
-    def _right_prompt(self): return FormattedText(
-        [
-            ('#85bb65 bold', f"[{self._total_tokens}]"), # dollar green for tokens
-            ('#3f7cac bold', f"[{'M' if self.multiline else 'S'}]"), # info blue for multiple
-        ] + ([('bold', f"[{self.loaded['name']}]")] if "name" in self.loaded else []) # loaded context/session file
-    )
+    def _right_prompt(self): return FormattedText([
+        ('#85bb65 bold', f"[{self._total_tokens}]"), # dollar green for tokens
+        ('#3f7cac bold', f"[{'M' if self.multiline else 'S'}]"), # info blue for multiple
+        *([('bold', f"[{self.loaded['name']}]")] if "name" in self.loaded else []), # loaded context/session file
+    ])
 
     def _handle_quit(self, content):
         raise EOFError
