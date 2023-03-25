@@ -97,81 +97,109 @@ class ConsoleChatBot():
         ] + ([('bold', f"[{self.loaded['name']}]")] if "name" in self.loaded else [])
     )
 
-    def start_prompt(self):
-        content = self.input.prompt(">>> ", rprompt=self.rprompt, vi_mode=True, multiline=self.multiline)
+    def handle_quit(self, content):
+        raise EOFError
 
-        # Parse input
-        if content.lower() == "/q": # quit
-            raise EOFError
-        if content.lower() == "/h": # help
-            self.console.print(Markdown(HELP_MD))
-            raise KeyboardInterrupt
-        if content.lower()[:2] == "/a": # amend assistant
-            self.display_expense()
-            self.model = content[3:]
+    def handle_help(self, content):
+        self.console.print(Markdown(HELP_MD))
+        raise KeyboardInterrupt
+
+    def handle_amend_assistant(self, content):
+        self.display_expense()
+        self.model = content[3:]
+        self.reset_session()
+        self.greet(new=True)
+        raise KeyboardInterrupt
+
+    def handle_multiline(self, content):
+        temp = content == "/m" # soft multilien only for next prompt
+        self.multiline = not self.multiline
+        self.multiline_mode = 1 if not temp else 2
+        raise KeyboardInterrupt
+
+    def handle_new_session(self, content):
+        hard = content == "/N"  # hard new ignores loaded context/session
+        self.display_expense()
+        self.reset_session(hard=hard)
+        self.greet(new=True)
+        raise KeyboardInterrupt
+
+    def _handle_replay(self, content, cls):
+        cs = content.split()
+        i = 1 if len(cs) == 1 else int(cs[1]) * 2 - 1
+        if len(self.info["messages"]) > i:
+            self.console.print(cls(self.info["messages"][-i]["content"]))
+        raise KeyboardInterrupt
+
+    def handle_display(self, content): 
+        return self._handle_replay(content, cls=(lambda x: Panel(x)))
+
+    def handle_plain(self, content): 
+        return self._handle_replay(content, cls=(lambda x: x))
+
+    def handle_markdown(self, content):
+        return self._handle_replay(content, cls=(lambda x: Panel(Markdown(x), subtitle_align="right", subtitle="rendered as Markdown")))
+
+    def handle_save_session(self, content):
+        filepath = content.split()[1]
+        with open(filepath, "w") as outfile:
+            json.dump(self.info["messages"], outfile)
+        raise KeyboardInterrupt
+
+    def handle_load_session(self, content):
+        self.display_expense()
+        filepath = content.split()[1]
+        with open(filepath, "r") as session:
+            messages = json.loads(session.read())
+        if content[:2] == "/L":
+            self.loaded["name"] = filepath
+            self.loaded["messages"] = messages
             self.reset_session()
             self.greet(new=True)
-            raise KeyboardInterrupt
-        if content == "/M": # multiline (mode 1)
-            self.multiline = not self.multiline
-            self.multiline_mode = 1
-            raise KeyboardInterrupt
-        if content == "/m": # multiline (temp, mode 2)
-            self.multiline = not self.multiline
-            self.multiline_mode = 2
-            raise KeyboardInterrupt
-        if content.lower() == "/n": # new session
-            self.display_expense()
-            self.reset_session(
-                hard=(content == "/N") # hard new ignores loaded context/session
-            )
-            self.greet(new=True)
-            raise KeyboardInterrupt
-        if content[:2].lower() == "/d": # display (of previous response) in console
-            i = 1 if len(content) == 2 else int(content[3:]) * 2 - 1
-            if len(self.info["messages"]) > i:
-                self.console.print(Panel(self.info["messages"][-i]["content"]))
-            raise KeyboardInterrupt
-        if content[:2].lower() == "/p": # plain (of previous response)
-            i = 1 if len(content) == 2 else int(content[3:]) * 2 - 1
-            if len(self.info["messages"]) > i:
-                self.console.print(self.info["messages"][-i]["content"])
-            raise KeyboardInterrupt
-        if content[:3].lower() == "/md": # markdown (of previous response)
-            i = 1 if len(content) == 3 else int(content[4:]) * 2 - 1
-            if len(self.info["messages"]) > i:
-                self.console.print(Panel(Markdown(self.info["messages"][-i]["content"]), subtitle_align="right", subtitle="rendered as Markdown"))
-            raise KeyboardInterrupt
-        if content[:3].lower() == "/s ": # save session
-            fp = content[3:]
-            with open(fp, "w") as outfile:
-                json.dump(self.info["messages"], outfile)
-            raise KeyboardInterrupt
-        if content[:3].lower() == "/l ": # load session
-            self.display_expense()
-            fp = content[3:]
-            with open(fp, "r") as session:
-                messages = json.loads(session.read())
-            if content[:2] == "/L":
-                self.loaded["name"] = fp
-                self.loaded["messages"] = messages
-                self.reset_session()
-                self.greet(new=True)
-            else:
-                self.reset_session()
-                self.info["messages"] = [*messages]
-                self.greet(new=True, session_name=fp)
-            raise KeyboardInterrupt
-        if content.lower().strip() == "":
+        else:
+            self.reset_session()
+            self.info["messages"] = [*messages]
+            self.greet(new=True, session_name=filepath)
+        raise KeyboardInterrupt
+
+    def handle_empty():
+        raise KeyboardInterrupt
+
+    def start_prompt(self):
+        
+        handlers = {
+            "/q": self.handle_quit,
+            "/h": self.handle_help,
+            "/a": self.handle_amend_assistant,
+            "/m": self.handle_multiline,
+            "/n": self.handle_new_session,
+            "/d": self.handle_display,
+            "/p": self.handle_plain,
+            "/md": self.handle_markdown,
+            "/s": self.handle_save_session,
+            "/l": self.handle_load_session,
+        }
+
+        content = self.input.prompt(">>> ", rprompt=self.rprompt, vi_mode=True, multiline=self.multiline)
+
+        # Handle empty
+        if content.strip() == "":
             raise KeyboardInterrupt
 
+        # Handle commands
+        handler = handlers.get(content.split()[0].lower(), None)
+        if handler is not None:
+            handler(content)
+
+        # Update message history and token counters
         self.update_conversation(content, "user")
 
+        # Deal with temp multiline
         if self.multiline_mode == 2:
             self.multiline_mode = 0
             self.multiline = not self.multiline
 
-        # Parse response
+        # Get and parse response
         try:
             response = openai.ChatCompletion.create(
                 model=self.model,
