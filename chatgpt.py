@@ -191,7 +191,7 @@ class ConsoleChatBot():
             "/l": self._handle_load_session,
         }
 
-        content = self.input.prompt(">>> ", _right_prompt=self._right_prompt, vi_mode=True, multiline=self.multiline)
+        content = self.input.prompt(">>> ", rprompt=self._right_prompt, vi_mode=True, multiline=self.multiline)
 
         # Handle empty
         if content.strip() == "":
