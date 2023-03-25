@@ -99,55 +99,55 @@ class ConsoleChatBot():
         ] + ([('bold', f"[{self.loaded['name']}]")] if "name" in self.loaded else [])
     )
 
-    def handle_quit(self, content):
+    def _handle_quit(self, content):
         raise EOFError
 
-    def handle_help(self, content):
+    def _handle_help(self, content):
         self.console.print(Panel(Markdown(HELP_MD), title="system"))
         raise KeyboardInterrupt
 
-    def handle_amend_assistant(self, content):
+    def _handle_amend_assistant(self, content):
         self.display_expense()
         self.model = content[3:]
         self.reset_session()
         self.greet(new=True)
         raise KeyboardInterrupt
 
-    def handle_multiline(self, content):
+    def _handle_multiline(self, content):
         temp = content == "/m" # soft multilien only for next prompt
         self.multiline = not self.multiline
         self.multiline_mode = 1 if not temp else 2
         raise KeyboardInterrupt
 
-    def handle_new_session(self, content):
+    def _handle_new_session(self, content):
         hard = content == "/N"  # hard new ignores loaded context/session
         self.display_expense()
         self.reset_session(hard=hard)
         self.greet(new=True)
         raise KeyboardInterrupt
 
-    def _handle_replay(self, content, display_wrapper=(lambda x: x)):
+    def __handle_replay(self, content, display_wrapper=(lambda x: x)):
         cs = content.split()
         i = 1 if len(cs) == 1 else int(cs[1]) * 2 - 1
         if len(self.info["messages"]) > i:
             self.console.print(display_wrapper(self.info["messages"][-i]["content"]))
         raise KeyboardInterrupt
 
-    def handle_display(self, content): 
-        return self._handle_replay(content, display_wrapper=(lambda x: Panel(x)))
+    def _handle_display(self, content): 
+        return self.__handle_replay(content, display_wrapper=(lambda x: Panel(x)))
 
-    def handle_plain(self, content): return self._handle_replay(content)
+    def _handle_plain(self, content): return self.__handle_replay(content)
 
-    def handle_markdown(self, content):
-        return self._handle_replay(content, display_wrapper=(lambda x: Panel(Markdown(x), subtitle_align="right", subtitle="rendered as Markdown")))
+    def _handle_markdown(self, content):
+        return self.__handle_replay(content, display_wrapper=(lambda x: Panel(Markdown(x), subtitle_align="right", subtitle="rendered as Markdown")))
 
-    def handle_save_session(self, content):
+    def _handle_save_session(self, content):
         filepath = content.split()[1]
         with open(filepath, "w") as outfile:
             json.dump(self.info["messages"], outfile)
         raise KeyboardInterrupt
 
-    def handle_load_session(self, content):
+    def _handle_load_session(self, content):
         self.display_expense()
         filepath = content.split()[1]
         with open(filepath, "r") as session:
@@ -163,22 +163,22 @@ class ConsoleChatBot():
             self.greet(new=True, session_name=filepath)
         raise KeyboardInterrupt
 
-    def handle_empty():
+    def _handle_empty():
         raise KeyboardInterrupt
 
     def start_prompt(self):
         
         handlers = {
-            "/q": self.handle_quit,
-            "/h": self.handle_help,
-            "/a": self.handle_amend_assistant,
-            "/m": self.handle_multiline,
-            "/n": self.handle_new_session,
-            "/d": self.handle_display,
-            "/p": self.handle_plain,
-            "/md": self.handle_markdown,
-            "/s": self.handle_save_session,
-            "/l": self.handle_load_session,
+            "/q": self._handle_quit,
+            "/h": self._handle_help,
+            "/a": self._handle_amend_assistant,
+            "/m": self._handle_multiline,
+            "/n": self._handle_new_session,
+            "/d": self._handle_display,
+            "/p": self._handle_plain,
+            "/md": self._handle_markdown,
+            "/s": self._handle_save_session,
+            "/l": self._handle_load_session,
         }
 
         content = self.input.prompt(">>> ", rprompt=self.rprompt, vi_mode=True, multiline=self.multiline)
