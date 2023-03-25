@@ -26,7 +26,8 @@ import atexit
 from util import num_tokens_from_messages, calculate_expense
 
 
-HELP_MD = """# Help / TL;DR
+HELP_MD = """
+Help / TL;DR
 - `/q`: **q**uit
 - `/h`: show **h**elp
 - `/a model`: **a**mend **a**ssistant
@@ -40,7 +41,6 @@ HELP_MD = """# Help / TL;DR
 - `/s filename`: **s**ave current session to `filename`
 - `/l filename`: **l**oad `filename` and start a new session
 - `/L filename`: **l**oad `filename` (permanently) and start a new session
----
 """
 
 CONFIG_FILEPATH = os.path.expanduser("~/.chatgpt-cli.toml")
@@ -75,7 +75,8 @@ class ConsoleChatBot():
         self.info["tokens"] = {"user": 0, "assistant": 0}
 
     def greet(self, help=False, new=False, session_name="new session"):
-        self.console.print("ChatGPT CLI" + (" (type /h for help)" if help else "") + (f" ({session_name})" if new else ""), style="bold")
+        side_info_str = (" (type `/h` for help)" if help else "") + (f" ({session_name})" if new else "")
+        self.console.print(Panel(Markdown("Welcome to ChatGPT CLI" + side_info_str), title="system"))
 
     def display_expense(self):
         total_expense = calculate_expense(
@@ -102,7 +103,7 @@ class ConsoleChatBot():
         raise EOFError
 
     def handle_help(self, content):
-        self.console.print(Markdown(HELP_MD))
+        self.console.print(Panel(Markdown(HELP_MD), title="system"))
         raise KeyboardInterrupt
 
     def handle_amend_assistant(self, content):
