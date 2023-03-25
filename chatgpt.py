@@ -126,21 +126,20 @@ class ConsoleChatBot():
         self.greet(new=True)
         raise KeyboardInterrupt
 
-    def _handle_replay(self, content, cls):
+    def _handle_replay(self, content, display_wrapper=(lambda x: x)):
         cs = content.split()
         i = 1 if len(cs) == 1 else int(cs[1]) * 2 - 1
         if len(self.info["messages"]) > i:
-            self.console.print(cls(self.info["messages"][-i]["content"]))
+            self.console.print(display_wrapper(self.info["messages"][-i]["content"]))
         raise KeyboardInterrupt
 
     def handle_display(self, content): 
-        return self._handle_replay(content, cls=(lambda x: Panel(x)))
+        return self._handle_replay(content, display_wrapper=(lambda x: Panel(x)))
 
-    def handle_plain(self, content): 
-        return self._handle_replay(content, cls=(lambda x: x))
+    def handle_plain(self, content): return self._handle_replay(content)
 
     def handle_markdown(self, content):
-        return self._handle_replay(content, cls=(lambda x: Panel(Markdown(x), subtitle_align="right", subtitle="rendered as Markdown")))
+        return self._handle_replay(content, display_wrapper=(lambda x: Panel(Markdown(x), subtitle_align="right", subtitle="rendered as Markdown")))
 
     def handle_save_session(self, content):
         filepath = content.split()[1]
