@@ -51,7 +51,7 @@ PRICING_RATE = {
     "gpt-4-32k":     {"prompt": 0.06,  "completion": 0.12},
 }
 
-
+# TODO Implement system message
 class ConsoleChatBot():
 
     def __init__(self, model, vi_mode=False, loaded={}):
