@@ -66,9 +66,9 @@ class ConsoleChatBot():
         self.multiline_mode = 0
 
         self.info = {}
-        self.reset_session()
+        self._reset_session()
 
-    def reset_session(self, hard=False):
+    def _reset_session(self, hard=False):
         if hard:
             self.loaded = {}
         self.info["messages"] = [] if hard or ("messages" not in self.loaded) else [*self.loaded["messages"]]
@@ -85,18 +85,18 @@ class ConsoleChatBot():
             PRICING_RATE[self.model]["prompt"],
             PRICING_RATE[self.model]["completion"],
         )
-        self.console.print(f"Total tokens used: [green bold]{self.total_tokens}")
+        self.console.print(f"Total tokens used: [green bold]{self._total_tokens}")
         self.console.print(f"Estimated expense: [green bold]${total_expense}")
 
     @property
-    def total_tokens(self): return self.info["tokens"]["user"] + self.info["tokens"]["assistant"]
+    def _total_tokens(self): return self.info["tokens"]["user"] + self.info["tokens"]["assistant"]
 
     @property
-    def rprompt(self): return FormattedText(
+    def _right_prompt(self): return FormattedText(
         [
-            ('#85bb65 bold', f"[{self.total_tokens}]"), # dollar green
-            ('#3f7cac bold', f"[{'M' if self.multiline else 'S'}]"), # info blue
-        ] + ([('bold', f"[{self.loaded['name']}]")] if "name" in self.loaded else [])
+            ('#85bb65 bold', f"[{self._total_tokens}]"), # dollar green for tokens
+            ('#3f7cac bold', f"[{'M' if self.multiline else 'S'}]"), # info blue for multiple
+        ] + ([('bold', f"[{self.loaded['name']}]")] if "name" in self.loaded else []) # loaded context/session file
     )
 
     def _handle_quit(self, content):
@@ -109,7 +109,7 @@ class ConsoleChatBot():
     def _handle_amend_assistant(self, content):
         self.display_expense()
         self.model = content[3:]
-        self.reset_session()
+        self._reset_session()
         self.greet(new=True)
         raise KeyboardInterrupt
 
@@ -122,7 +122,7 @@ class ConsoleChatBot():
     def _handle_new_session(self, content):
         hard = content == "/N"  # hard new ignores loaded context/session
         self.display_expense()
-        self.reset_session(hard=hard)
+        self._reset_session(hard=hard)
         self.greet(new=True)
         raise KeyboardInterrupt
 
@@ -155,16 +155,26 @@ class ConsoleChatBot():
         if content[:2] == "/L":
             self.loaded["name"] = filepath
             self.loaded["messages"] = messages
-            self.reset_session()
+            self._reset_session()
             self.greet(new=True)
         else:
-            self.reset_session()
+            self._reset_session()
             self.info["messages"] = [*messages]
             self.greet(new=True, session_name=filepath)
         raise KeyboardInterrupt
 
     def _handle_empty():
         raise KeyboardInterrupt
+
+    def _update_conversation(self, content, role):
+        assert role in ("user", "assistant")
+        message = {"role": role, "content": content}
+        self.info["messages"].append(message)
+        # If it's user, all history are considered as the prompt
+        # If it's assistant, only the recent response is part of completion
+        self.info["tokens"][role] += num_tokens_from_messages(
+            self.info["messages"] if role == "user" else [message]
+        )
 
     def start_prompt(self):
         
@@ -181,7 +191,7 @@ class ConsoleChatBot():
             "/l": self._handle_load_session,
         }
 
-        content = self.input.prompt(">>> ", rprompt=self.rprompt, vi_mode=True, multiline=self.multiline)
+        content = self.input.prompt(">>> ", _right_prompt=self._right_prompt, vi_mode=True, multiline=self.multiline)
 
         # Handle empty
         if content.strip() == "":
@@ -193,7 +203,7 @@ class ConsoleChatBot():
             handler(content)
 
         # Update message history and token counters
-        self.update_conversation(content, "user")
+        self._update_conversation(content, "user")
 
         # Deal with temp multiline
         if self.multiline_mode == 2:
@@ -238,15 +248,7 @@ class ConsoleChatBot():
                 panel.subtitle = f"elapsed {time.time() - start_time:.3f} seconds"
 
         # Update message history and token counters
-        self.update_conversation(response_content.plain, "assistant")
-
-    def update_conversation(self, content, role):
-        assert role in ("user", "assistant")
-        message = {"role": role, "content": content}
-        self.info["messages"].append(message)
-        self.info["tokens"][role] += num_tokens_from_messages(
-            self.info["messages"] if role == "user" else [message]
-        )
+        self._update_conversation(response_content.plain, "assistant")
 
 
 @click.command()
