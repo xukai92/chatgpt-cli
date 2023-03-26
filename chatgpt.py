@@ -299,7 +299,11 @@ def main(context, session) -> None:
         loaded["messages"] = json.loads(session.read())
 
     # Init chat bot
-    ccb = ConsoleChatBot(config["model"], vi_mode=config["vi_mode"], loaded=loaded)
+    
+    ccb = ConsoleChatBot(config["model"], 
+                         vi_mode=config.get("vi_mode", False), 
+                         vertical_overflow="visible" if config.get("visible_overflow", False) else "ellipsis", 
+                         loaded=loaded)
 
     # Run the display expense function when exiting the script
     atexit.register(ccb.display_expense)
