@@ -54,10 +54,11 @@ PRICING_RATE = {
 # TODO Implement system message
 class ConsoleChatBot():
 
-    def __init__(self, model, vi_mode=False, loaded={}):
+    def __init__(self, model, vi_mode=False, vertical_overflow="ellipsis", loaded={}):
         
         self.model = model
         self.vi_mode = vi_mode
+        self.vertical_overflow = vertical_overflow
         self.loaded = loaded
 
         self.console = Console()
@@ -251,7 +252,7 @@ class ConsoleChatBot():
 
         response_content = Text()
         panel = Panel(response_content, title=self.model, subtitle_align="right")
-        with Live(panel, console=self.console, refresh_per_second=5) as live:
+        with Live(panel, console=self.console, refresh_per_second=5, vertical_overflow=self.vertical_overflow) as live:
             start_time = time.time()
             for chunk in response:
                 chunk_message = chunk['choices'][0]['delta']
