@@ -74,9 +74,12 @@ class ConsoleChatBot():
         self.info["messages"] = [] if hard or ("messages" not in self.loaded) else [*self.loaded["messages"]]
         self.info["tokens"] = {"user": 0, "assistant": 0}
 
+    def _sys_print(self, *args, **kwargs):
+        self.console.print(Panel(*args, title="system", **kwargs))
+
     def greet(self, help=False, new=False, session_name="new session"):
         side_info_str = (" (type `/h` for help)" if help else "") + (f" ({session_name})" if new else "")
-        self.console.print(Panel(Markdown("Welcome to ChatGPT CLI" + side_info_str), title="system"))
+        self._sys_print(Markdown("Welcome to ChatGPT CLI" + side_info_str))
 
     def display_expense(self):
         total_expense = calculate_expense(
@@ -85,11 +88,10 @@ class ConsoleChatBot():
             PRICING_RATE[self.model]["prompt"],
             PRICING_RATE[self.model]["completion"],
         )
-        self.console.print(Panel(
+        self._sys_print(
             f"Total tokens used: [green bold]{self._total_tokens}[/green bold]\n"
             f"Estimated expense: [green bold]${total_expense}[/green bold]",
-            title="system"
-        ))
+        )
 
     @property
     def _total_tokens(self): return self.info["tokens"]["user"] + self.info["tokens"]["assistant"]
@@ -105,7 +107,7 @@ class ConsoleChatBot():
         raise EOFError
 
     def _handle_help(self, content):
-        self.console.print(Panel(Markdown(HELP_MD), title="system"))
+        self._sys_print(Markdown(HELP_MD))
         raise KeyboardInterrupt
 
     def _handle_amend_assistant(self, content):
@@ -144,14 +146,22 @@ class ConsoleChatBot():
         return self.__handle_replay(content, display_wrapper=(lambda x: Panel(Markdown(x), subtitle_align="right", subtitle="rendered as Markdown")))
 
     def _handle_save_session(self, content):
-        filepath = content.split()[1]
+        cs = content.split()
+        if len(cs) < 2:
+            self._sys_print(Markdown("**WARNING**: The second argument `filename` is missing in the `\s filename` command."))
+            raise KeyboardInterrupt
+        filepath = cs[1]
         with open(filepath, "w") as outfile:
             json.dump(self.info["messages"], outfile)
         raise KeyboardInterrupt
 
     def _handle_load_session(self, content):
         self.display_expense()
-        filepath = content.split()[1]
+        cs = content.split()
+        if len(cs) < 2:
+            self._sys_print(Markdown("**WARNING**: The second argument `filename` is missing in the `\l filename` or `\L filename` command."))
+            raise KeyboardInterrupt
+        filepath = cs[1]
         with open(filepath, "r") as session:
             messages = json.loads(session.read())
         if content[:2] == "/L":
