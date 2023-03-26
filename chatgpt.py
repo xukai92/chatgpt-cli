@@ -277,15 +277,15 @@ def main(context, session) -> None:
     try:
         with open(CONFIG_FILEPATH) as file:
             config = toml.load(file)
-        openai.api_key = config['api-key']
     except FileNotFoundError:
         print("Configuration file not found. Please copy `chatgpt-cli.toml` from the repo root to your home as `~/.chatgpt-cli.toml`.")
         sys.exit(1)
-    if not config["api-key"].startswith("sk"):
+    if ("api-key" not in config) or (not config["api-key"].startswith("sk")):
         config["api-key"] = os.environ.get("OAI_SECRET_KEY", "fail")
     if not config["api-key"].startswith("sk"):
         print("API key incorrect. Please make sure it's set in `~/.chatgpt-cli.toml` or via environment variable `OAI_SECRET_KEY`.")
         sys.exit(1)
+    openai.api_key = config['api-key']
 
     # Context from the command line option
     loaded = {}
