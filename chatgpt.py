@@ -293,6 +293,10 @@ def main(context, session) -> None:
     if context is not None:
         loaded["name"] = context.name
         loaded["messages"] = [{"role": "system", "content": context.read().strip()}]
+    elif "context" in config and config["context"] != "":
+        loaded["name"] = "default"
+        loaded["messages"] = [{"role": "system", "content": config["context"]}]
+
 
     # Session from the command line option
     if session is not None:
